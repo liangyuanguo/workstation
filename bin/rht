@@ -1,0 +1,363 @@
+#!/bin/bash
+
+#################################
+####  parse args and options
+#################################
+# @intrudoction:
+#   option example: cmd -y=90
+#   others are args
+#################################
+
+
+declare -a args
+declare -A options
+
+for i in $*
+do
+    if [[ $i == -* ]]
+    then
+        v=${i:1}
+        key=${v%%=*}
+
+        if [ "$key" = '' ]
+        then
+            continue
+        fi
+
+        value=${v#*=}
+
+        if [ "$value" = "$v" ]
+        then
+            value=''
+        fi
+
+        options["$key"]=$value
+        continue
+    fi
+
+    args+=($i)
+done
+
+####################################
+## for test parse args and options
+####################################
+#for i in ${args[@]}
+#do
+#       echo $i
+#done
+#
+#for i in ${!options[@]}
+#do
+#       echo "$i=${options[$i]}"
+#done
+
+
+
+####################################
+##      get import var from env
+####################################
+
+WK_HOME=${options['d']:-$PWD}
+ISO_PATH=${options['iso']}
+NETWORK=${options['net']}
+CLONE_TEMPLATE=${options['template']}
+
+####################################
+##          MAIN
+####################################
+
+is_first=true
+case ${args[0]} in
+    'init')
+	ls -d /etc/libvirt/qemu
+	ls -d /var/lib/libvirt/images
+        exit 0
+        ;;
+    'install')
+cat << EOF 
+qemu-img create -f qcow2 /var/lib/libvirt/images/any.qcow2 20G
+virt-install -n <name> -r 2048 --vcpus 1 --disk <disk-path> --location <iso-localtion> --nographics --network network=<> --os-variant rocky9 --console pty,target_type=serial --extra-args 'console=ttyS0,115200n8 serial'
+
+sudo virt-install     --name=kali     --memory=4096     --vcpus=2   --os-variant=debian11     --network network=default     --graphics vnc,listen=0.0.0.0  --noautoconsole     --cdrom /home/russionbear/Downloads/kali-linux-2024.2-installer-amd64.iso     --disk path=/var/lib/libvirt/images/kali.qcow2,size=20
+EOF
+        ;;
+    'clone')
+        # 没用
+        cpu=${options['cpu']:-1}
+        mem=${options['mem']:-2048}
+
+        for i in ${args[@]}
+        do
+            if [ "$is_first" == "true" ];then is_first=false; continue;fi
+            disk_path=/var/lib/libvirt/images/$i.qcow2
+            if ! [[ -v options['-ignore'] ]];then if [ -e $disk_path ];then echo "$disk_path existed"; exit 1;fi;fi
+            echo "virt-clone -o $CLONE_TEMPLATE -n $i -f $disk_path"
+            virt-clone -o $CLONE_TEMPLATE -n $i -f $disk_path
+        done
+        ;;
+    'net-init')
+        echo hi
+        min_ip=${options['min-ip']}
+        user=${options['user']:-root}
+        password=${options['pass']}
+        if [ -z $password ];then read -s -n 16 -p "input password: " password;fi
+        con_name=${options['cname']:-enp1s0}
+        gateway=${options['gw']}
+        for i in ${args[@]}
+        do
+            if [ "$is_first" == "true" ];then is_first=false; continue;fi
+
+touch $WK_HOME/.tmp
+chmod 600 $WK_HOME/.tmp
+cat > $WK_HOME/.tmp << EOF
+set timeout 3
+spawn virsh console $i
+expect -re "Escape character.*"
+send $user\r
+expect -re "Password.*"
+send $password\r
+expect -re ".*root.*"
+send "nmcli c modify $con_name ipv4.method manual ipv4.addresses $min_ip/24 ipv4.gateway $gateway autoconnect yes && nmcli c up $con_name && exit \r"
+expect eof
+EOF
+            expect -f $WK_HOME/.tmp
+            rm -rf $WK_HOME/.tmp
+
+            n=${min_ip##*.}
+            let n++
+            min_ip="${min_ip%.*}.$n"
+        done
+        ;;
+    'ssh')
+        ls -d ~/.ssh/id_rsa &> /dev/null
+
+        # ssh-key-gen
+        if ! [ $? -eq 0 ] || [[ -v options['-new'] ]]
+        then
+            rm -rf ~/.ssh
+            ssh-keygen -t rsa -b 4096 -P "" -f ~/.ssh/id_rsa
+        fi
+
+        user=${options['user']:-root}
+        password=${options['pass']}
+        if [ -z $password ];then read -s -n 16 -p "input password: " password;fi
+        for i in ${args[@]}
+        do
+            if [ "$is_first" == "true" ];then is_first=false; continue;fi
+            touch .tmp
+            chmod 600 .tmp
+# expect 默认是通配符匹配
+cat > .tmp << EOF
+set timeout 3
+spawn ssh-copy-id $user@$i
+expect {
+    "*Are you sure you want to continue connecting*" {
+        send "yes\r"
+        exp_continue
+    }
+    "*password:" {
+        send "$password\r"
+        expect eof
+    }
+}
+EOF
+            expect -f .tmp
+            rm -rf .tmp
+        done
+        ;;
+    'user-init-by-net')
+        user=${options['user']:-alice}
+        password=${options['pass']}
+        suser=${options['suser']='root'}
+        sudo_str="$user    ALL=(ALL)       NOPASSWD:ALL"
+        if [ -z $password ];then read -s -n 16 -p "input password: " password;fi
+        for i in ${args[@]}
+        do
+            if [ "$is_first" == "true" ];then is_first=false; continue;fi
+            cmd_create_user="useradd -s /bin/bash -d /home/$user $user;echo $password | passwd --stdin $user;"
+            cmd_mod_perm="sed -i '/^$user/d' /etc/sudoers; sed -i '101i$sudo_str' /etc/sudoers;"
+            ssh suser@$i "$cmd_create_user$cmd_mod_perm"
+        done
+        ;;
+    'user-init')
+        user=${options['user']:-alice}
+        password=${options['pass']}
+        suser=${options['suser']='alice'}
+        spass=${options['spass']='redhat'}
+        sudo_str="$user    ALL=(ALL)       NOPASSWD:ALL"
+        cmd_edit_visudo="sed -i '/^$user/d' /etc/sudoers;sed -i '101i$sudo_str' /etc/sudoers;"
+        if [ -z $password ];then read -s -n 16 -p "input password: " password;fi
+        for i in ${args[@]}
+        do
+            if [ "$is_first" == "true" ];then is_first=false; continue;fi
+touch $WK_HOME/.tmp
+chmod 600 $WK_HOME/.tmp
+cat > $WK_HOME/.tmp << EOF
+set timeout 3
+spawn virsh console $i
+expect -re "Escape character.*"
+send $suser\r
+expect -re "Password.*"
+send $spass\r
+expect -re ".*root.*"
+send "useradd -s /bin/bash -d /home/$user $user;echo $password | passwd --stdin $user;$cmd_edit_visudo exit;\r"
+expect eof
+EOF
+            expect -f $WK_HOME/.tmp
+            rm -rf $WK_HOME/.tmp
+
+        done
+        ;;
+
+    # 'init-public-node')
+    #     user=${options['user']:-root}
+    #     for i in ${args[@]}
+    #     do
+    #         if [ "$is_first" == "true" ];then is_first=false; continue;fi
+    #         cmd_install_ftp="yum -y install epel-release ftp httpd;"
+    #         ssh $user@$i "$cmd_install_ftp"
+    #     done
+    #     ;;
+    "init-control-node")
+        user=${options['user']:-root}
+        for i in ${args[@]}
+        do
+            if [ "$is_first" == "true" ];then is_first=false; continue;fi
+            cmd_install_collection="ansible-galaxy collection install community.general;ansible-galaxy collection install ansible.posix;ansible-galaxy collection install  ansible.utils;"
+            ssh $user@$i  "sudo dnf -y install epel-release;sudo dnf -y install ansible-core rhel-system-roles;$cmd_install_collection"
+        done
+        ;;
+    'gen-cert')
+        crt_home=${WK_HOME}
+        key_home=${WK_HOME}
+        is_first=true
+        if [ -z ${options['d']:-} ]
+        then
+            crt_home=/etc/ssl/certs
+            key_home=/etc/ssl/private
+        fi
+
+        for i in ${args[@]}
+        do
+            if [ "$is_first" == "true" ];then is_first=false; continue;fi
+            openssl req -newkey rsa:2048 -nodes -keyout ${crt_home}/${i}.key -x509 -days 3650 -out ${key_home}/${i}.pem
+        done
+        ;;
+    'gen-ca-cert')
+        ca_key=${options["ca-key"]:-$WK_HOME/ca.key}
+        ca_crt=${options["ca-crt"]:-$WK_HOME/ca.crt}
+
+        if ! [ -e $ca_crt -a -e $ca_key ]
+        then
+            # generate ca.key and ca.crt
+
+            openssl genrsa -out $ca_key 4096
+            openssl req -x509 -new -nodes -sha512 -days 3650 \
+                -subj "/C=CN/ST=Beijing/L=Beijing/O=example/OU=Personal/CN=MyPersonal Root CA" \
+                -key $ca_key \
+                -out $ca_crt
+        fi
+
+        dn=${args[1]}
+        openssl genrsa -out $WK_HOME/$dn.key 4096
+        openssl req -sha512 -new \
+            -subj "/C=CN/ST=Beijing/L=Beijing/O=example/OU=Personal/CN=$dn" \
+            -key $WK_HOME/$dn.key \
+            -out $WK_HOME/$dn.csr
+cat > $WK_HOME/v3.ext <<-EOF
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[alt_names]
+EOF
+        it=1;
+        for i in ${args[@]}
+        do
+            if [ "$is_first" == "true" ];then is_first=false; continue;fi
+            echo "DNS.$it=$i" >> $WK_HOME/v3.ext
+            let it++;
+        done
+
+        openssl x509 -req -sha512 -days 3650 \
+            -extfile $WK_HOME/v3.ext \
+            -CA $ca_crt -CAkey $ca_key -CAcreateserial \
+            -in $WK_HOME/$dn.csr \
+            -out $WK_HOME/$dn.crt
+        rm -rf $WK_HOME/v3.ext $WK_HOME/$dn.csr
+        openssl x509 -inform PEM -in $WK_HOME/$dn.crt -out $WK_HOME/$dn.cert
+        ;;
+
+    disk-add)
+        size=${options['size']}
+        m_name=${args[1]}
+        sudo virsh list --all --name | grep "$m_name" -q
+        if [ $? -ne 0 ];then echo $m_name not exist;exit 1;fi
+
+        is_first=1
+        for i in ${args[@]}
+        do
+            if ((is_first<=2));then let is_first++; continue;fi
+            
+            if [ "$i" == 'vda' ];then continue;fi
+
+            disk_path=/var/lib/libvirt/images/${m_name}${i}.qcow2
+             if [ -e $disk_path ];then  echo error $disk_path;exit 1;fi
+            qemu-img create -f qcow2 $disk_path $size
+
+            virsh attach-disk $m_name $disk_path $i --subdriver qcow2 --persistent
+        done
+        ;;
+
+    disk-del)
+        m_name=${args[1]}
+        sudo virsh list --all --name | grep "$m_name" -q
+        if [ $? -ne 0 ];then echo $m_name not exist;exit 1;fi
+
+        is_first=1
+        for i in ${args[@]}
+        do
+            if ((is_first<=2));then let is_first++; continue;fi
+            
+            if [ "$i" == 'vda' ];then continue;fi
+
+            disk_path=/var/lib/libvirt/images/${m_name}${i}.qcow2
+             if ! [ -e $disk_path ];then  echo error $disk_path;exit 1;fi
+            virsh detach-disk $m_name $i --persistent
+            
+            rm -rf $disk_path
+        done
+        ;;
+    *)
+cat << EOF
+options:
+    [-d workspace]
+examples:
+    init [-d workspace]    
+        ;create some directroies
+    clone [-template=origin_vm_name] -cpu=1 -mem=2048 ...kvm-hosts
+        ;some hosts
+    net-init [-min-ip] [-user] [-pass] [-cname=con_name] [-gw=gateway] ...kvm-hosts
+        ;init net before ssh connection built
+    ssh [-user] [-pass=password] ...hosts
+        ;run ssh-copy-if for each host
+    user-init [-user] [-pass] [-suser=console_user] [-spass=console_pass] ...hosts
+        ;create user with password for each host
+    user-init-by-net [-user] [-pass] [-suser=ssh_user] ...kvm-hosts
+        ;create user with password for each host, you should config sshd without password before call it
+    init-control-node [-user] ...hosts
+        ;init ansible node , you should config sshd without password before call it
+    gen-cert [-d work] [-ca-key] [-ca-crt] dn sub1.dn sub2.dn ...
+        ;generate ca-key ca-crt  key  crt
+    disk-add -size=10G kvm-name vdb vdc vdd ...
+        ;;
+    disk-del kvm-name vdb vdc vdd ...
+        ;;
+special:
+    program will be interaction when option '-pass'  is enmpty and needed
+
+EOF
+        ;;
+esac
