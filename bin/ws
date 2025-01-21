@@ -1,0 +1,322 @@
+#!/bin/bash
+
+function usage(){
+cat <<EOF
+    Usage: $0 [<server>] <command> [options]
+        server:
+            base                dbaas-base
+            kc                  dbaas-keycloak
+            gitea               saas-gitea
+            nextcloud           saas-nextcloud
+            gateway             gateway
+            all                 all
+        cmd:
+            install            install
+            update             update
+            uninstall          uninstall
+    Options:
+    -h, --help          Print this message
+    -v, --version       Print the version
+EOF
+    exit 0
+}
+
+
+function base_install(){
+    helm install base           charts/dbaas-base            --namespace ws-dbaas-base --create-namespace
+}
+function kc_install(){
+    helm install kc             charts/dbaas-keycloak        --namespace ws-dbaas-kc --create-namespace
+}
+
+function gitea_install(){
+    helm install gitea          charts/saas-gitea            --namespace ws-saas-gitea --create-namespace
+}
+function nextcloud_install(){
+    helm install nextcloud      charts/saas-nextcloud        --namespace ws-saas-nextcloud --create-namespace
+}
+function code_install(){
+    helm install code        charts/saas-code               --namespace ws-saas-code --create-namespace
+}
+function gateway_install(){
+    helm install gateway        charts/gateway               --namespace ws-gateway --create-namespace
+    echo $(kubectl get secret --namespace ws-saas-code code-code-server -o jsonpath="{.data.password}" | base64 --decode)
+}
+function all_install(){
+    base_install
+    kc_install
+    gitea_install
+    nextcloud_install
+    code_install
+    gateway_install
+}
+
+function base_update(){
+    helm upgrade base           charts/dbaas-base            --namespace ws-dbaas-base --create-namespace
+}
+function kc_update(){
+    helm upgrade kc             charts/dbaas-keycloak        --namespace ws-dbaas-kc --create-namespace
+}
+function gitea_update(){
+    helm upgrade gitea          charts/saas-gitea            --namespace ws-saas-gitea --create-namespace
+}
+function nextcloud_update(){
+    helm upgrade nextcloud      charts/saas-nextcloud        --namespace ws-saas-nextcloud --create-namespace
+}
+function code_update(){
+    helm upgrade code        charts/saas-code               --namespace ws-saas-code 
+}
+function gateway_update(){
+    helm upgrade gateway        charts/gateway               --namespace ws-gateway --create-namespace
+    kubectl -n ws-gateway rollout restart sts gateway
+    kubectl -n ws-gateway wait --for=condition=available --timeout=10s sts gateway
+}
+function all_update(){
+    base_update
+    kc_update
+    gitea_update
+    nextcloud_update
+    code_update
+    gateway_update
+}
+
+function base_uninstall(){
+    helm uninstall base           --namespace ws-dbaas-base
+    kubectl get pvc -n ws-dbaas-base -o name | xargs -I {} kubectl delete {} --namespace ws-dbaas-base
+}
+function kc_uninstall(){
+    helm uninstall kc             --namespace ws-dbaas-kc
+    kubectl get pvc -n ws-dbaas-kc -o name | xargs -I {} kubectl delete {} -n ws-dbaas-kc
+}
+function gitea_uninstall(){
+    helm uninstall gitea          --namespace ws-saas-gitea
+    kubectl get pvc -n ws-saas-gitea -o name | xargs -I {} kubectl delete {} --namespace ws-saas-gitea
+}
+function nextcloud_uninstall(){
+    helm uninstall nextcloud      --namespace ws-saas-nextcloud
+    kubectl get pvc -n ws-saas-nextcloud -o name | xargs -I {} kubectl delete {} --namespace ws-saas-nextcloud
+}
+function code_uninstall(){
+    helm uninstall code                   --namespace ws-saas-code
+    kubectl get pvc -n ws-saas-code -o name | xargs -I {} kubectl delete {} --namespace ws-saas-code
+}
+function gateway_uninstall(){
+    helm uninstall gateway        --namespace ws-gateway
+    kubectl get pvc -n ws-gateway -o name | xargs -I {} kubectl delete {} --namespace ws-gateway
+}
+function all_uninstall(){
+    base_uninstall
+    kc_uninstall
+    gitea_uninstall
+    nextcloud_uninstall
+    code_uninstall
+    gateway_uninstall
+}
+
+
+function show-alive(){
+    timeout 1s  curl https://sso.russionbear.com &> /dev/null
+    echo "keycloak: $?"
+
+    timeout 1s  curl https://s3.russionbear.com &> /dev/null
+    echo "s3: $?"
+
+    timeout 1s curl https://admin-s3.russionbear.com &> /dev/null
+    echo "admin-s3: $?"
+
+    timeout 1s curl https://harbor.russionbear.com &> /dev/null
+    echo "harbor: $?"
+
+    timeout 1s curl https://code-hub.russionbear.com &> /dev/null
+    echo "code-hub: $?"
+
+    timeout 1s curl https://code.russionbear.com &> /dev/null
+    echo "code: $?"
+
+    timeout 1s curl https://fs.russionbear.com &> /dev/null
+    echo "fs-nextcloud: $? 可能不准确 https://fs.russionbear.com"
+
+    nc -zv db.russionbear.com 30200 &> /dev/null
+    echo "mysql: $?"
+
+    nc -zv db.russionbear.com 30210 &> /dev/null
+    echo "mongodb: $?"
+
+    nc -zv db.russionbear.com 30220 &> /dev/null
+    echo "postgresql: $?"
+
+    nc -zv db.russionbear.com 30220 &> /dev/null
+    echo "mongodb: $?"
+
+    nc -zv db.russionbear.com 30230 &> /dev/null
+    echo "redis: $?"
+
+    nc -zv db.russionbear.com 30240 &> /dev/null
+    echo "clickhouse: $?"
+
+    nc -zv db.russionbear.com 30251 &> /dev/null
+    echo "kafka: $?"
+
+    nc -zv db.russionbear.com 30253 &> /dev/null
+    echo "rabbitmq: $?"
+
+
+    nc -zv db.russionbear.com 30301 &> /dev/null
+    echo "gitea-ssh: $?"
+
+}
+function save-image(){
+    rm -rf images/*
+    helm template charts/dbaas-base         --namespace ws-dbaas-base     | grep "image:"  | awk '{print $2}'  | tr -d '"' | uniq > images/list.txt
+    helm template charts/dbaas-keycloak        --namespace ws-dbaas-kc  | grep "image:"  | awk '{print $2}'  | tr -d '"' | uniq >> images/list.txt
+    helm template  charts/saas-gitea            --namespace ws-saas-gitea  | grep "image:"  | awk '{print $2}'  | tr -d '"' | uniq >> images/list.txt
+    helm template charts/saas-nextcloud    --namespace ws-saas-nextcloud  | grep "image:"  | awk '{print $2}'  | tr -d '"' | uniq >> images/list.txt
+    helm template charts/saas-code    --namespace ws-saas-code  | grep "image:"  | awk '{print $2}'  | tr -d '"' | uniq >> images/list.txt
+    helm template charts/gateway               --namespace ws-gateway  | grep "image:"  | awk '{print $2}'  | tr -d '"' | uniq >> images/list.txt
+    cat images/list.txt | sort | uniq > images/list2.txt
+    mv images/list2.txt images/list.txt
+    cat images/list.txt
+    while read -r line;do
+        img_file=$(echo $line | sed 's|/|__|g' | sed 's|:|___|g').tar
+        echo $line
+        docker pull $line
+        docker save -o images/$img_file  $line
+    done < images/list.txt
+}
+function load-image(){
+    while read -r line;do
+        img_file=$(echo $line | sed 's|/|__|g' | sed 's|:|___|g').tar
+        echo $line
+        microk8s.ctr i import images/$img_file 
+    done < images/list.txt
+}
+function gateway_cloud-conf(){
+    kubectl -n ws-gateway get cm nginx-cloud-conf -o yaml
+}
+
+
+function __refresh_config() {
+    local tpl=$1
+    local value=$2
+     if [ $tpl == $value ]; then
+        echo "error"
+        exit 1
+    fi
+    cp $tpl $value
+    for i in ${CONST_VARS[@]}; do
+        val=$(declare -p $i)
+        val=${val#*=}
+        val=$(echo $val | tr -d '"')
+        sed -i "s|${i}|${val}|g"  $value
+    done
+}
+function refresh-config(){
+    source config/config.sh
+
+    __refresh_config charts/dbaas-base/values.yaml.template charts/dbaas-base/values.yaml
+    __refresh_config charts/dbaas-keycloak/values.yaml.template charts/dbaas-keycloak/values.yaml
+    __refresh_config charts/gateway/values.yaml.template charts/gateway/values.yaml
+    __refresh_config charts/saas-code/values.yaml.template charts/saas-code/values.yaml
+    __refresh_config charts/saas-gitea/values.yaml.template charts/saas-gitea/values.yaml
+    __refresh_config charts/saas-nextcloud/values.yaml.template charts/saas-nextcloud/values.yaml
+}
+
+function main(){
+    server=$1
+    cmd=$2
+    if [ -z $server ];then
+        usage
+    fi
+    if [ -z $cmd ];then
+        operation=$server
+    else
+        operation=${server}_${cmd}
+    fi
+    case  $operation in
+        load-image)
+            load-image
+            ;;
+        refresh-config)
+            refresh-config
+            ;;
+        show-alive)
+            show-alive
+            ;;
+        save-image)
+            save-image
+            ;;
+        gateway_cloud-conf)
+            gateway_cloud-conf 
+        ;;
+        ### #################  ################### ###
+        base_install)
+            base_install
+            ;;
+        base_update)
+            base_update
+            ;;
+        base_uninstall)
+            base_uninstall
+            ;;
+        kc_install)
+            kc_install
+            ;;
+        kc_update)
+            kc_update
+            ;;
+        kc_uninstall)
+            kc_uninstall
+            ;;
+        gitea_install)
+            gitea_install
+            ;;
+        gitea_update)
+            gitea_update
+            ;;
+        gitea_uninstall)
+            gitea_uninstall
+            ;;
+        nextcloud_install)
+            nextcloud_install
+            ;;
+        nextcloud_update)
+            nextcloud_update
+            ;;
+        nextcloud_uninstall)
+            nextcloud_uninstall
+            ;;
+        gateway_install)
+            gateway_install
+            ;;
+        gateway_update)
+            gateway_update
+            ;;
+        gateway_uninstall)
+            gateway_uninstall
+            ;;
+        code_install)
+            code_install
+            ;;
+        code_update)
+            code_update
+            ;;
+        code_uninstall)
+            code_uninstall
+            ;;
+        all_install)
+            all_install
+            ;;
+        all_update)
+            all_update
+            ;;
+        all_uninstall)
+            all_uninstall
+            ;;
+        *)
+            usage
+            ;;
+    esac
+}
+
+
+main  $@

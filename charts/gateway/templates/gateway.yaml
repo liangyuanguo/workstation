@@ -1,0 +1,210 @@
+{{- if .Values.gateway.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway
+data:
+  nginx.conf: |-
+    user  nginx;
+    worker_processes  auto;
+    error_log  /var/log/nginx/error.log notice;
+    pid        /var/run/nginx.pid;
+
+    events {
+        worker_connections  1024;
+    }
+
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+
+        access_log  /var/log/nginx/access.log  main;
+
+        sendfile        on;
+        tcp_nopush     on;
+        server_tokens off;
+        keepalive_timeout  65;
+        ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3; # Dropping SSLv3, ref: POODLE    
+        ssl_prefer_server_ciphers on;  
+        gzip  on;
+        client_max_body_size 500M;
+
+        {{- range .Values.gateway.http }}
+
+        {{- if .tlsSecret }}
+        server {
+            listen 443 ssl;
+            {{- range .serveNames }}
+            server_name {{ . }};
+            {{- end }}
+            ssl_certificate /etc/nginx/tls/{{ .tlsSecret }}/tls.crt;
+            ssl_certificate_key /etc/nginx/tls/{{ .tlsSecret }}/tls.key;
+
+            ssl_protocols TLSv1.2 TLSv1.3;
+            ssl_ciphers 'ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256';
+            ssl_prefer_server_ciphers on;
+            ssl_session_cache shared:SSL:10m;
+            ssl_session_timeout 5m;
+
+            location {{ .location }} {
+                proxy_pass {{ .proxyPass }};
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+
+                proxy_http_version 1.1;
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+            }
+        }
+        {{- else }}
+        server {
+            listen 80;
+            {{- range .serveNames }}
+            server_name {{ . }};
+            {{- end }}
+
+            location {{ .location }} {
+                proxy_pass {{ .proxyPass }};
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+            }
+        }
+        {{- end }}
+        {{- end }}
+    }
+
+    stream {
+      {{- range .Values.gateway.tcp }}
+        server {
+          listen {{ .listenPort }}  {{ if eq .protocol "UDP" }}udp{{ end}};
+          proxy_pass {{ .backendHost }}:{{ .backendPort }};
+        }
+      {{- end }}
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-cloud-conf
+data:
+  nginx-conf: |-
+    # user  nginx;
+    user www-data;
+    worker_processes  auto;
+    error_log  /var/log/nginx/error.log notice;
+    pid        /var/run/nginx.pid;
+    include /etc/nginx/modules-enabled/*.conf;
+
+    events {
+        worker_connections  1024;
+    }
+    stream {
+        server {
+          listen 80;
+          proxy_pass {{ $.Values.gateway.backendServer }}:80;
+        }
+        server {
+          listen 443;
+          proxy_pass {{ $.Values.gateway.backendServer }}:443;
+        }
+    }
+    stream {
+      {{- range .Values.gateway.tcp }}
+        server {
+          listen {{ .listenPort }};
+          proxy_pass {{ $.Values.gateway.backendServer }}:{{ .listenPort }};
+        }
+      {{- end }}
+    }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gateway
+  template:
+    metadata:
+      labels:
+        app: gateway
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 80
+        - containerPort: 443
+        {{- range .Values.gateway.tcp }}
+        - containerPort: {{ .listenPort }}
+        {{- end }}
+        volumeMounts:
+        - name: nginx-conf-volume
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+      {{- range $secretName, $secretData := .Values.tlsSecrets }}
+        - name: tls-{{  $secretName | replace "." "-" }}
+          mountPath: /etc/nginx/tls/{{ $secretName }}
+          readOnly: true
+      {{- end }}
+        resources:
+          limits:
+            cpu: 100m
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+      volumes:
+      - name: nginx-conf-volume
+        configMap:
+          name: gateway
+    {{- range $secretName, $secretData := .Values.tlsSecrets }}
+      - name: tls-{{  $secretName | replace "." "-" }}
+        secret:
+          secretName: "{{ $secretName }}"
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+    {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector:
+    app: gateway
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+      nodePort: 30080
+      name: http
+    - protocol: TCP
+      port: 443
+      targetPort: 443
+      nodePort: 30443
+      name: https
+    {{- range .Values.gateway.tcp }}
+    - protocol: {{ .protocol }}
+      port: {{ .backendPort }}
+      targetPort: {{ .backendPort }}
+      nodePort: {{ .listenPort }}
+      name: {{ .name }}
+    {{- end }}
+  type: NodePort
+{{- end }}

@@ -1,0 +1,89 @@
+# https://raw.githubusercontent.com/kubernetes/examples/master/staging/storage/minio/minio-distributed-statefulset.yaml
+#  for k8s versions before 1.9.0 use apps/v1beta2  and before 1.8.0 use extensions/v1beta1
+{{- if .Values.minio.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Delete
+    whenScaled: Retain
+  serviceName: minio
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        env:
+        - name: MINIO_ACCESS_KEY
+          value: "{{.Values.minio.accessKey}}"
+        - name: MINIO_SECRET_KEY
+          value: "{{.Values.minio.secretKey}}"
+        image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+        imagePullPolicy: IfNotPresent
+        args:
+        - server
+        - /data
+        - --console-address
+        - :9001
+        - --address
+        - :9000
+        # - http://minio-0.minio.default.svc.cluster.local/data
+        # - http://minio-1.minio.default.svc.cluster.local/data
+        # - http://minio-2.minio.default.svc.cluster.local/data
+        # - http://minio-3.minio.default.svc.cluster.local/data
+        ports:
+        - containerPort: 9000
+        - containerPort: 9001
+        # These volume mounts are persistent. Each pod in the Statefulset
+        # gets a volume mounted based on this field.
+        resources:
+          limits:
+            cpu: 256m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 256Mi
+        volumeMounts:
+        - name: data
+          mountPath: /data
+  # These are converted to volume claims by the controller
+  # and mounted at the paths mentioned above.
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      # storageClassName: standard
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  labels:
+    app: minio
+spec:
+  clusterIP: None
+  ports:
+    - port: 9000
+      targetPort: 9000
+      name: minio    
+    - port: 9001
+      targetPort: 9001
+      name: minio-ctrl
+  selector:
+    app: minio
+{{- end }}

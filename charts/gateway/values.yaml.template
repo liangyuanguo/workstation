@@ -1,0 +1,204 @@
+gateway:
+  enabled: true
+  backendServer: BACKEND_SERVER
+  http:
+    - serveNames:
+      - s3.-.mini-server.ws
+      - s3.WS_VALUES_DOMAIN
+      tlsSecret: WS_VALUES_DOMAIN
+      location: /
+      proxyPass: http://minio.ws-dbaas-base.svc.cluster.local:9000
+    - serveNames:
+      - admin-s3.-.mini-server.ws
+      - admin-s3.WS_VALUES_DOMAIN
+      tlsSecret: WS_VALUES_DOMAIN
+      location: /
+      proxyPass: http://minio.ws-dbaas-base.svc.cluster.local:9001
+    # - serveNames:
+    #   - harbor.-.mini-server.ws
+    #   - harbor.WS_VALUES_DOMAIN
+    #   tlsSecret: WS_VALUES_DOMAIN
+    #   location: /
+    #   proxyPass: http://harbor.ws-dbaas-base.svc.cluster.local:80
+    - serveNames:
+      - code-hub.-.mini-server.ws
+      - code-hub.WS_VALUES_DOMAIN
+      - code-hub-staic.-.mini-server.ws
+      - code-hub-static.WS_VALUES_DOMAIN
+      tlsSecret: WS_VALUES_DOMAIN
+      location: /
+      proxyPass: http://gitea-http.ws-saas-gitea.svc.cluster.local:3000    
+    - serveNames:
+      - rabbitmq.-.mini-server.ws
+      - rabbitmq.WS_VALUES_DOMAIN
+      tlsSecret: WS_VALUES_DOMAIN
+      location: /
+      proxyPass: http://base-rabbitmq.ws-dbaas-base.svc.cluster.local:15672
+    - serveNames:
+      - sso.-.mini-server.ws
+      - sso.WS_VALUES_DOMAIN
+      tlsSecret: WS_VALUES_DOMAIN
+      location: /
+      proxyPass: http://kc-keycloak-headless.ws-dbaas-kc.svc.cluster.local:8080
+    - serveNames:
+      - fs.-.mini-server.ws
+      - fs.WS_VALUES_DOMAIN
+      tlsSecret: WS_VALUES_DOMAIN
+      location: /
+      proxyPass: http://nextcloud.ws-saas-nextcloud.svc.cluster.local:443
+    - serveNames:
+      - code.-.mini-server.ws
+      - code.WS_VALUES_DOMAIN
+      tlsSecret: WS_VALUES_DOMAIN
+      location: /
+      proxyPass: http://code-code-server.ws-saas-code.svc.cluster.local:8080
+  tcp: 
+    # - listenPort: 30053
+    #   backendHost: kube-dns.kube-system.svc.cluster.local
+    #   backendPort: 53
+    #   name: dns
+    #   protocol: UDP
+    # - listenPort: 30053
+    #   backendHost: kube-dns.kube-system.svc.cluster.local
+    #   backendPort: 53
+    #   name: dns-tcp
+    #   protocol: TCP
+    - listenPort: 30200
+      backendHost: mysql-0.mysql.ws-dbaas-base.svc.cluster.local
+      backendPort: 3306
+      name: mysql
+      protocol: TCP
+    - listenPort: 30210
+      backendHost: mongodb-0.mongodb.ws-dbaas-base.svc.cluster.local
+      backendPort: 27017
+      name: mongodb
+      protocol: TCP
+    - listenPort: 30220
+      backendHost: postgresql-0.postgresql.ws-dbaas-base.svc.cluster.local
+      backendPort:  5432
+      name: postgresql
+      protocol: TCP
+    - listenPort: 30230
+      backendHost: redis-0.redis.ws-dbaas-base.svc.cluster.local
+      backendPort:  6379
+      name: redis
+      protocol: TCP
+    - listenPort: 30240
+      backendHost: base-clickhouse.ws-dbaas-base.svc.cluster.local
+      backendPort:  8123
+      name: clickhouse
+      protocol: TCP
+    - listenPort: 30241
+      backendHost: base-clickhouse.ws-dbaas-base.svc.cluster.local
+      backendPort:  9004
+      name: clickhouse-sql
+      protocol: TCP
+    - listenPort: 30251
+      backendHost: base-kafka-controller-0-external.ws-dbaas-base.svc.cluster.local
+      backendPort:  30251
+      name: kafka
+      protocol: TCP
+    - listenPort: 30253
+      backendHost: base-rabbitmq.ws-dbaas-base.svc.cluster.local
+      backendPort:  5672
+      name: rabbitmq
+      protocol: TCP
+    # application
+    - listenPort: 30301
+      backendHost: gitea-ssh.ws-saas-gitea.svc.cluster.local
+      backendPort:  22
+      name: code-hub-ssh
+      protocol: TCP
+
+tlsSecrets:
+  WS_VALUES_DOMAIN:
+    certificate: |-
+      -----BEGIN CERTIFICATE-----
+      MIIFBTCCA+2gAwIBAgISBOC/oAeRqKQ+n7TbxjdbjjtrMA0GCSqGSIb3DQEBCwUA
+      MDMxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MQwwCgYDVQQD
+      EwNSMTEwHhcNMjQxMDIzMTY1NzU2WhcNMjUwMTIxMTY1NzU1WjAcMRowGAYDVQQD
+      DBEqLnJ1c3Npb25iZWFyLmNvbTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoC
+      ggEBAOFEfx6AR4Tld5MsY2BJCiuTZHpUIJ676f8UVd+yar9JbXXyEC3Fu/xNZOdm
+      0lMn3kgBzd+G5/hUuYLF+7NKb/038jpo8/06JBBE1okHczH8eotVU9zx9A4lXKu5
+      EHoN9y7+DwFevy6dwvlDfXfBQp251hem4tYjSIRCTkRUlfRJWWcT42/JTBvanHOG
+      T/zG0DC03eQx08AlYM7xe3ms9x6AB/5ZcT4CQeX9keXvZJKM+sO04nx8Ed8wHmm1
+      x2i7OR7lmqAm5nW0VxOYa/Civjx0F1ixB5RpswoIzsx0s9oNjk8+kWmCCseLNfzM
+      0FDmj2qjPopTCGtxz9P6YRwFzOsCAwEAAaOCAigwggIkMA4GA1UdDwEB/wQEAwIF
+      oDAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYBBQUHAwIwDAYDVR0TAQH/BAIwADAd
+      BgNVHQ4EFgQU9aWe2Udtm3jHhCPFbz1ZM+T1gtowHwYDVR0jBBgwFoAUxc9GpOr0
+      w8B6bJXELbBeki8m47kwVwYIKwYBBQUHAQEESzBJMCIGCCsGAQUFBzABhhZodHRw
+      Oi8vcjExLm8ubGVuY3Iub3JnMCMGCCsGAQUFBzAChhdodHRwOi8vcjExLmkubGVu
+      Y3Iub3JnLzAtBgNVHREEJjAkghEqLnJ1c3Npb25iZWFyLmNvbYIPcnVzc2lvbmJl
+      YXIuY29tMBMGA1UdIAQMMAowCAYGZ4EMAQIBMIIBBgYKKwYBBAHWeQIEAgSB9wSB
+      9ADyAHcA5tIxY0B3jMEQQQbXcbnOwdJA9paEhvu6hzId/R43jlAAAAGSuoXWGgAA
+      BAMASDBGAiEA3epAKktASTjT21n2ktg4mmZO99UkKAATWUFXpxIuwPwCIQDhn9Az
+      I/WA5iY3eNSfDhrmUaEZvcUlsCqI0sVp/lF1kwB3AOCSs/wMHcjnaDYf3mG5lk0K
+      UngZinLWcsSwTaVtb1QEAAABkrqF1h4AAAQDAEgwRgIhAMKQn3JWn0xAW0/SL/Lb
+      o/A/Nl9D21P/8Z5ot+m7EuU8AiEAud03VpdXwY8dkoNotPJWE9HquQHSqKNHjJrJ
+      fPG84PswDQYJKoZIhvcNAQELBQADggEBAEbgTWKHRbxdV4MfTKCg3ocyiNLqeCSi
+      3TFqKBlJHEfHmpPMALmqQd2X0RF24rjyvW25Wfv3AZDCAHSpgH0H/TkdjsH5xABB
+      R27eVfAkVi2kyVJnqf6XuYM+LSJJ369KAUayzJoWptkgnyS2s7cVjtntyBaUPgjl
+      0HIMTrF6XX6hg8bBBGLx6GkfTm8k8V/lOX7QoJR1/tBK0vbSaU8vchmowYwfZuQG
+      br1aL5RbdPGTX6PO7/Chbq95Lanxysok0WQvgPonGu6MEsmJUh14qx3sn67y87/S
+      NRART85ZJopwM3hZ5vKzuGNV88eBzfqs5LH6wtQDvFtZtC71oNXl+xM=
+      -----END CERTIFICATE-----
+
+      -----BEGIN CERTIFICATE-----
+      MIIFBjCCAu6gAwIBAgIRAIp9PhPWLzDvI4a9KQdrNPgwDQYJKoZIhvcNAQELBQAw
+      TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+      cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMjQwMzEzMDAwMDAw
+      WhcNMjcwMzEyMjM1OTU5WjAzMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNTGV0J3Mg
+      RW5jcnlwdDEMMAoGA1UEAxMDUjExMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
+      CgKCAQEAuoe8XBsAOcvKCs3UZxD5ATylTqVhyybKUvsVAbe5KPUoHu0nsyQYOWcJ
+      DAjs4DqwO3cOvfPlOVRBDE6uQdaZdN5R2+97/1i9qLcT9t4x1fJyyXJqC4N0lZxG
+      AGQUmfOx2SLZzaiSqhwmej/+71gFewiVgdtxD4774zEJuwm+UE1fj5F2PVqdnoPy
+      6cRms+EGZkNIGIBloDcYmpuEMpexsr3E+BUAnSeI++JjF5ZsmydnS8TbKF5pwnnw
+      SVzgJFDhxLyhBax7QG0AtMJBP6dYuC/FXJuluwme8f7rsIU5/agK70XEeOtlKsLP
+      Xzze41xNG/cLJyuqC0J3U095ah2H2QIDAQABo4H4MIH1MA4GA1UdDwEB/wQEAwIB
+      hjAdBgNVHSUEFjAUBggrBgEFBQcDAgYIKwYBBQUHAwEwEgYDVR0TAQH/BAgwBgEB
+      /wIBADAdBgNVHQ4EFgQUxc9GpOr0w8B6bJXELbBeki8m47kwHwYDVR0jBBgwFoAU
+      ebRZ5nu25eQBc4AIiMgaWPbpm24wMgYIKwYBBQUHAQEEJjAkMCIGCCsGAQUFBzAC
+      hhZodHRwOi8veDEuaS5sZW5jci5vcmcvMBMGA1UdIAQMMAowCAYGZ4EMAQIBMCcG
+      A1UdHwQgMB4wHKAaoBiGFmh0dHA6Ly94MS5jLmxlbmNyLm9yZy8wDQYJKoZIhvcN
+      AQELBQADggIBAE7iiV0KAxyQOND1H/lxXPjDj7I3iHpvsCUf7b632IYGjukJhM1y
+      v4Hz/MrPU0jtvfZpQtSlET41yBOykh0FX+ou1Nj4ScOt9ZmWnO8m2OG0JAtIIE38
+      01S0qcYhyOE2G/93ZCkXufBL713qzXnQv5C/viOykNpKqUgxdKlEC+Hi9i2DcaR1
+      e9KUwQUZRhy5j/PEdEglKg3l9dtD4tuTm7kZtB8v32oOjzHTYw+7KdzdZiw/sBtn
+      UfhBPORNuay4pJxmY/WrhSMdzFO2q3Gu3MUBcdo27goYKjL9CTF8j/Zz55yctUoV
+      aneCWs/ajUX+HypkBTA+c8LGDLnWO2NKq0YD/pnARkAnYGPfUDoHR9gVSp/qRx+Z
+      WghiDLZsMwhN1zjtSC0uBWiugF3vTNzYIEFfaPG7Ws3jDrAMMYebQ95JQ+HIBD/R
+      PBuHRTBpqKlyDnkSHDHYPiNX3adPoPAcgdF3H2/W0rmoswMWgTlLn1Wu0mrks7/q
+      pdWfS6PJ1jty80r2VKsM/Dj3YIDfbjXKdaFU5C+8bhfJGqU3taKauuz0wHVGT3eo
+      6FlWkWYtbt4pgdamlwVeZEW+LM7qZEJEsMNPrfC03APKmZsJgpWCDWOKZvkZcvjV
+      uYkQ4omYCTX5ohy+knMjdOmdH9c7SpqEWBDC86fiNex+O0XOMEZSa8DA
+      -----END CERTIFICATE-----
+
+    key: |-
+      -----BEGIN RSA PRIVATE KEY-----
+      MIIEogIBAAKCAQEA4UR/HoBHhOV3kyxjYEkKK5NkelQgnrvp/xRV37Jqv0ltdfIQ
+      LcW7/E1k52bSUyfeSAHN34bn+FS5gsX7s0pv/TfyOmjz/TokEETWiQdzMfx6i1VT
+      3PH0DiVcq7kQeg33Lv4PAV6/Lp3C+UN9d8FCnbnWF6bi1iNIhEJORFSV9ElZZxPj
+      b8lMG9qcc4ZP/MbQMLTd5DHTwCVgzvF7eaz3HoAH/llxPgJB5f2R5e9kkoz6w7Ti
+      fHwR3zAeabXHaLs5HuWaoCbmdbRXE5hr8KK+PHQXWLEHlGmzCgjOzHSz2g2OTz6R
+      aYIKx4s1/MzQUOaPaqM+ilMIa3HP0/phHAXM6wIDAQABAoIBAAp5K8vYPPsBzDBs
+      hOZKHw3tmWNSm/2lUPjKEkAHRI1GNa+hJH1sTxQo6QMVNbwmA2CnrNGyrQBPuBxL
+      Zitsz44fVsS+cnGYjWqwOKVAUmvFiFEIE5EXMrihphBZ11lFYvOtXjc7F3psXU9H
+      gwLZWmaI6FpLKQq5szpq9saYhCxKUmIFeSp0/wFdF1SAlOLUjQlj+hRU2vUly8W+
+      YGBpYsvX2ygzWHu3LmmI84YDgsYsObqtkCG1HdZ59HBXHXZEC89Pan+QMDsIXjBO
+      kISSuu78L6JEeMAfTP9tupEOT17daI9kRAeZHg9a1IDYf1yX9/6zNZ6AdEZsWfr7
+      GTtwuYkCgYEA+6AaGyygGGK/RhZfWOEPw1eBbvIdeEl6FU9DLdwWFQuog6Qprf5b
+      G2yKDhdGk3W7rVPgx9m6XpIiCgYAHvCwwtBi9wcNweJByVl98suwz9pfb9FEcCm+
+      gwuLj6cpbQxJ7kMBTz8LTTIxE66r870dXuFiOZy7W2eZ7THcLYoR0EUCgYEA5S8V
+      voWwWL6PToAcWLOUyEuhik8tCLTcyaWk4hdvICSZQqVscxdaWROXjaPkUZnrRaGg
+      SBD3V2unlgDGZOMetDKDfszhCWt9NIc1taACWyAIgQLWHYrCSDa4Oh9sV+21jwJX
+      BCw3QJxAL0Vj+U2wGmIrO2U6A/ukGMveKZxf828CgYBE1V9O375L7Xd1rNkYbzjo
+      rx9xQjpdlXwYKD6wZOyFhVLr8BSWzGYP8nkxsZxU6ngUykVLZnxdMoytQUb3L9Cq
+      +maYPQ2+ZC6q7hhOOvp7YbmJ1S1roX/ESXw8J/ZlJl9zFlFdZFmrHHfgcoAHhUxr
+      kCxWplF6h7TL9j/NFWAaIQKBgDazSENS8UYdJWMdHKbnJcmwk3vJbfw3/sJ6MKJt
+      6W4IjjPj+8B0gHHmRTPfPC1lyUuzSegpdH9/CF67DJ8jvj5QGCZ5i/SNnTKeWulg
+      qW9Kc/0myif+6GQH+2yT9239JGpfqpkqXH2lTYR60WO9cRy69YqVnIU62G26qunP
+      ku8tAoGAThOwRgbtXa4mzYHDdweV7LgsHxFGWxPF6Vh21Txrm7tpi7Rw+ItOc0U6
+      UALPcWpnRCOHT4v/DZbwRmMbPUQgnkHst3gwTZ5Me3D3Zw19NHa3eqqY10W3xErM
+      tCGBXJfc4nT49onyFBhfqCrLA3fXEyKdnRD6qaKgxr+C0rm4KMY=
+      -----END RSA PRIVATE KEY-----
+

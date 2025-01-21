@@ -1,0 +1,97 @@
+minio:
+  enabled: true
+  accessKey: WS_VALUES_USER
+  secretKey: WS_VALUES_PASS
+mysql:
+  enabled: true
+  replicas: 2
+  password: mysql
+redis:
+  enabled: true
+  replicas: 2
+  password: redis
+postgresql:
+  enabled: true
+  replicas: 2
+  password: postgresql
+mongodb:
+  enabled: true
+  replicas: 1
+  password: mongodb
+
+clickhouse:
+  enabled: true
+  shards: 1
+  replicaCount: 1
+  auth:
+    password: clickhouse
+    username: default
+  zookeeper:
+    enabled: false
+
+harbor:
+  enabled: false
+  externalURL: https://harbor.WS_VALUES_DOMAIN
+  # 密码需要至少8位
+  harborAdminPassword: Harbor12345
+  expose:
+    type: clusterIP
+    tls:
+      enabled: false
+
+
+# TODO 外部访问 consumer 测试可能还要看一下
+kafka:
+  enabled: true
+  sasl:
+    client:
+      users:
+        - user1
+      password: user1
+    controller:
+      user: controller_user   
+      password: controller_user   
+    interbroker:
+      user: inter_broker_user 
+      password: "inter_broker_user" 
+  controller:
+    replicaCount: 1
+  kraft:
+    clusterId: "kraft"
+  externalAccess:
+    enabled: true
+    controller: 
+      forceExpose: false
+      service:
+        type: ClusterIP
+        domain: db.WS_VALUES_DOMAIN
+        ports:
+          external: 30251
+        externalIPs:
+        - db.WS_VALUES_DOMAIN
+    broker:
+      service:
+        type: ClusterIP
+        domain: db.WS_VALUES_DOMAIN
+        ports:
+          external: 30251
+        externalIPs:
+        - db.WS_VALUES_DOMAIN
+  listeners:
+    client:
+      protocol: PLAINTEXT
+    controller:
+      protocol: PLAINTEXT
+    interbroker:
+      protocol: PLAINTEXT
+    external:
+      protocol: PLAINTEXT
+
+
+rabbitmq:
+  enabled: true
+  auth:
+    username: WS_VALUES_USER
+    password: WS_VALUES_PASS
+  clustering:
+    enabled: false

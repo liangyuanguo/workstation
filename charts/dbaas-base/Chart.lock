@@ -1,0 +1,15 @@
+dependencies:
+- name: clickhouse
+  repository: https://charts.bitnami.com/bitnami
+  version: 7.1.4
+- name: gitea
+  repository: https://dl.gitea.com/charts
+  version: 10.6.0
+- name: harbor
+  repository: https://helm.goharbor.io
+  version: 1.16.0
+- name: kafka
+  repository: https://charts.bitnami.com/bitnami
+  version: 31.1.1
+digest: sha256:d098445918291ff63286650affd471b08d5e288b5fee4ba367b0bc9ed070f640
+generated: "2025-01-11T13:51:24.277432682Z"
